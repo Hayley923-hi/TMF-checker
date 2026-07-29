@@ -130,10 +130,11 @@ if uploaded_file:
 
     df = pd.read_excel(uploaded_file)
 
-    st.success("File Uploaded Successfully!")
+    st.success(
+        f"Artifact Uploaded ({len(df)} records)"
+    )
 
-    st.dataframe(df.head())
-
+    
 # ==================================================
 # Document Type Summary
 # ==================================================
@@ -204,10 +205,10 @@ if contact_file and uploaded_file:
         .str.strip()
     )
 
-    st.success("Contact List Uploaded!")
-
-    st.dataframe(contact_df.head())
-
+    st.success(
+        f"Contact List Uploaded ({len(contact_df)} staff)"
+    )
+    
     # ===================================
     # Internal Matching data
     # ===================================
@@ -364,12 +365,16 @@ if contact_file and uploaded_file:
 
             unmatched_docs.append(
                 {
+                    "Document Date":
+                        pd.to_datetime(
+                            row["Document Date"]
+                        ).strftime("%Y-%m-%d"),
+
                     "Classification":
                         row["Classification"],
+
                     "Description":
                         row["Description"],
-                    "Document Date":
-                        row["Document Date"]
                 }
             )
 
@@ -457,7 +462,7 @@ if contact_file and uploaded_file:
 
         compliance_results.append(row)
 
-  
+
     compliance_df = pd.DataFrame(
         compliance_results
     )
