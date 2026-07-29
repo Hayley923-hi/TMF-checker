@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
+import re
 from rapidfuzz import fuzz
-from itertools import permutations
 
 required_docs = {
 
@@ -87,32 +87,56 @@ required_docs = {
 
 def normalize_name(text):
 
-    return (
-        str(text)
-        .replace(",", "")
-        .replace("-", "")
-        .replace(" ", "")
-        .lower()
+    text = str(text).lower()
+
+    text = re.sub(r"[-,.]", " ", text)
+
+    text = re.sub(r"\s+", " ", text)
+
+    return text.strip()
+
+
+def investigator_match(name, description):
+
+    name_clean = normalize_name(name)
+    desc_clean = normalize_name(description)
+
+    # 이름이 그대로 포함된 경우
+    if name_clean in desc_clean:
+        return True
+
+    # 순서 뒤집힌 이름
+    reverse_name = " ".join(
+        reversed(name_clean.split())
     )
 
+    if reverse_name in desc_clean:
+        return True
 
-def generate_name_variations(name):
+    score = fuzz.partial_token_sort_ratio(
+        name_clean,
+        desc_clean
+    )
 
-    cleaned = str(name).replace(",", " ")
-    parts = cleaned.split()
+    return score >= 70
 
-    variations = set()
+def best_match_score(description, contact_names):
 
-    for p in permutations(parts):
+    best_name = ""
+    best_score = 0
 
-        variations.add(
-            normalize_name(
-                "".join(p)
-            )
+    for staff_name in contact_names:
+
+        score = fuzz.partial_token_sort_ratio(
+            normalize_name(staff_name),
+            normalize_name(description)
         )
 
-    return list(variations)
+        if score > best_score:
+            best_score = score
+            best_name = staff_name
 
+    return best_name, best_score
 
 # ==================================================
 # Artifact upload
@@ -134,7 +158,7 @@ if uploaded_file:
         f"Artifact Uploaded ({len(df)} records)"
     )
 
-    
+
 # ==================================================
 # Document Type Summary
 # ==================================================
@@ -208,44 +232,25 @@ if contact_file and uploaded_file:
     st.success(
         f"Contact List Uploaded ({len(contact_df)} staff)"
     )
-    
+
     # ===================================
     # Internal Matching data
     # ===================================
     staff_results = []
 
-    name_col = "Name(EN)"
-
     for name in contact_df["Name(EN)"]:
-
-        search_names = generate_name_variations(name)
 
         docs_found = []
 
         for _, row in staff_docs.iterrows():
 
-            desc_clean = normalize_name(
-                str(row["Description"])
-            )
-
-            for candidate in search_names:
-
-                if candidate in desc_clean:
-                    docs_found.append(
-                        row["Classification"]
-                    )
-                    break
-
-                score = fuzz.partial_ratio(
-                    candidate,
-                    desc_clean
+            if investigator_match(
+                name,
+                row["Description"]
+            ):
+                docs_found.append(
+                    row["Classification"]
                 )
-
-                if score >= 75:
-                    docs_found.append(
-                        row["Classification"]
-                    )
-                    break
 
         docs_found = list(set(docs_found))
 
@@ -273,8 +278,6 @@ if contact_file and uploaded_file:
             "Role"
         ].iloc[0]
 
-        search_names = generate_name_variations(name)
-
         for _, row in staff_docs.iterrows():
 
             if "training" not in str(
@@ -283,26 +286,10 @@ if contact_file and uploaded_file:
 
                 continue
 
-            desc_clean = normalize_name(
-                str(row["Description"])
+            matched = investigator_match(
+                name,
+                row["Description"]
             )
-
-            matched = False
-
-            for candidate in search_names:
-
-                if candidate in desc_clean:
-                    matched = True
-                    break
-
-                score = fuzz.partial_ratio(
-                    candidate,
-                    desc_clean
-                )
-
-                if score >= 75:
-                    matched = True
-                    break
 
             if matched:
 
@@ -327,41 +314,27 @@ if contact_file and uploaded_file:
 
     st.subheader("Unmatched Documents")
 
-    all_staff_names = set()
-
-    for name in contact_df["Name(EN)"]:
-
-        variations = generate_name_variations(name)
-
-        for v in variations:
-            all_staff_names.add(v)
-
     unmatched_docs = []
 
     for _, row in staff_docs.iterrows():
 
-        desc_clean = normalize_name(
-         str(row["Description"])
-        )
-
         matched = False
 
-        for staff_name in all_staff_names:
+        for staff_name in contact_df["Name(EN)"]:
 
-            if staff_name in desc_clean:
-                matched = True
-                break
-
-            score = fuzz.partial_ratio(
+            if investigator_match(
                 staff_name,
-                desc_clean
-            )
-
-            if score >= 75:
+                row["Description"]
+            ):
                 matched = True
                 break
 
         if not matched:
+
+            best_name, best_score = best_match_score(
+                row["Description"],
+                contact_df["Name(EN)"]
+            )
 
             unmatched_docs.append(
                 {
@@ -375,6 +348,13 @@ if contact_file and uploaded_file:
 
                     "Description":
                         row["Description"],
+
+                    "Closest staff":
+                        best_name,
+
+                    "Match Score":
+                        round(best_score,1)
+
                 }
             )
 
@@ -391,6 +371,7 @@ if contact_file and uploaded_file:
         unmatched_df,
         use_container_width=True
     )
+
 
 # ==================================================
 # staff summary
@@ -461,7 +442,6 @@ if contact_file and uploaded_file:
                 row[doc] = "-"
 
         compliance_results.append(row)
-
 
     compliance_df = pd.DataFrame(
         compliance_results
@@ -596,7 +576,7 @@ if contact_file and uploaded_file:
     )
 
     # ==================================
-    # missing summary 
+    # missing summary
     # ===================================
     st.subheader("Missing Documents Summary")
 
