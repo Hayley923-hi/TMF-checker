@@ -28,6 +28,16 @@ required_docs = {
         "Training"
     ],
 
+    "CRC Main": [
+        "Data Privacy",
+        "Training"
+    ],
+
+    "Main CRC": [
+        "Data Privacy",
+        "Training"
+    ],
+
     "Study Nurse": [
         "Data Privacy",
         "Training"
@@ -250,6 +260,67 @@ if contact_file and uploaded_file:
     )
 
     # ======================================
+    # Training Data
+    # ======================================
+
+    training_records = []
+
+    for name in contact_df["Name(EN)"]:
+
+        role = contact_df.loc[
+            contact_df["Name(EN)"] == name,
+            "Role"
+        ].iloc[0]
+
+        search_names = generate_name_variations(name)
+
+        for _, row in staff_docs.iterrows():
+
+            if "training" not in str(
+                row["Classification"]
+            ).lower():
+
+                continue
+
+            desc_clean = normalize_name(
+                str(row["Description"])
+            )
+
+            matched = False
+
+            for candidate in search_names:
+
+                if candidate in desc_clean:
+                    matched = True
+                    break
+
+                score = fuzz.partial_ratio(
+                    candidate,
+                    desc_clean
+                )
+
+                if score >= 75:
+                    matched = True
+                    break
+
+            if matched:
+
+                training_records.append(
+                    {
+                        "Name": name,
+                        "Role": role,
+                        "Training Description":
+                            row["Description"],
+                        "Date":
+                            row["Document Date"]
+                    }
+                )
+
+    training_df = pd.DataFrame(
+        training_records
+    )
+
+    # ======================================
     # Unmatched Documents
     # ======================================
 
@@ -313,73 +384,6 @@ if contact_file and uploaded_file:
 
     st.dataframe(
         unmatched_df,
-        use_container_width=True
-    )
-
-# ======================================
-# training detail table
-# =======================================
-    st.subheader("Training Details")
-
-    training_records = []
-
-    for name in contact_df["Name(EN)"]:
-
-        role = contact_df.loc[
-            contact_df["Name(EN)"] == name,
-            "Role"
-        ].iloc[0]
-
-        search_names = generate_name_variations(name)
-
-        for _, row in staff_docs.iterrows():
-
-            if "training" not in str(
-                row["Classification"]
-            ).lower():
-
-                continue
-
-            desc_clean = normalize_name(
-                str(row["Description"])
-            )
-
-            matched = False
-
-            for candidate in search_names:
-
-                score = fuzz.partial_ratio(
-                    candidate,
-                    desc_clean
-                )
-
-                if score >= 85:
-
-                    matched = True
-
-                    break
-
-            if matched:
-
-                training_records.append(
-                    {
-                        "Name": name,
-                        "Role": role,
-                        "Training Description":
-                            row["Description"],
-                        "Date":
-                            row["Document Date"]
-                    }
-                )
-
-    st.write("Training records count:", len(training_records))
-
-    training_df = pd.DataFrame(
-        training_records
-    )
-
-    st.dataframe(
-        training_df,
         use_container_width=True
     )
 
@@ -453,19 +457,28 @@ if contact_file and uploaded_file:
 
         compliance_results.append(row)
 
+  
     compliance_df = pd.DataFrame(
         compliance_results
     )
-# ==========================================
+
+# ======================================
 # Main Dashboard
-# ==========================================
+# ======================================
 
-    dashboard_results = []
+    st.subheader("Main Dashboard")
 
-    for _, row in compliance_df.iterrows():
+    for _, person in compliance_df.iterrows():
 
-        required = 0
+        staff_name = person["Name"]
+        role = person["Role"]
+
+        person_training = training_df[
+            training_df["Name"] == staff_name
+        ]
+
         completed = 0
+        required = 0
 
         for doc in [
             "Curriculum Vitae",
@@ -474,11 +487,11 @@ if contact_file and uploaded_file:
             "Training"
         ]:
 
-            if row[doc] != "-":
+            if person[doc] != "-":
 
                 required += 1
 
-                if row[doc] == "✅":
+                if person[doc] == "✅":
                     completed += 1
 
         score = round(
@@ -486,34 +499,61 @@ if contact_file and uploaded_file:
         ) if required > 0 else 0
 
         if score == 100:
-            status = "🟢 Green"
+            status = "🟢"
 
         elif score >= 75:
-            status = "🟡 Amber"
+            status = "🟡"
 
         else:
-            status = "🔴 Red"
+            status = "🔴"
 
-        dashboard_results.append(
-            {
-                "Site Staff": row["Name"],
-                "Role": row["Role"],
-                "Compliance Score": f"{score}%",
-                "Status": status
-            }
-        )
+        with st.expander(
+            f"{status} {staff_name} | {role} | Compliance {score}%"
+        ):
 
-    dashboard_df = pd.DataFrame(
-        dashboard_results
-    )
+            st.markdown("### Document Status")
 
-    st.subheader("Main Dashboard")
+            doc_status_df = pd.DataFrame(
+                {
+                    "Document": [
+                        "Curriculum Vitae",
+                        "Financial Disclosure",
+                        "Data Privacy",
+                        "Training"
+                    ],
+                    "Status": [
+                        person["Curriculum Vitae"],
+                        person["Financial Disclosure"],
+                        person["Data Privacy"],
+                        person["Training"]
+                    ]
+                }
+            )
 
-    st.dataframe(
-        dashboard_df,
-        use_container_width=True
-    )
+            st.dataframe(
+                doc_status_df,
+                use_container_width=True
+            )
 
+            st.markdown("### Training Records")
+
+            if len(person_training) > 0:
+
+                st.dataframe(
+                    person_training[
+                        [
+                            "Training Description",
+                            "Date"
+                        ]
+                    ],
+                    use_container_width=True
+                )
+
+            else:
+
+                st.warning(
+                    "No training records found."
+                )
 
 # ==========================================
 # TMF Health Score
