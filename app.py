@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from rapidfuzz import fuzz
+from itertools import permutations
 
 required_docs = {
 
@@ -92,42 +93,16 @@ def generate_name_variations(name):
 
     variations = set()
 
-    variations.add(
-        normalize_name(name)
-    )
-
-    if len(parts) == 3:
-
-        first = parts[0]
-        middle = parts[1]
-        last = parts[2]
+    for p in permutations(parts):
 
         variations.add(
-            normalize_name(first + middle + last)
-        )
-
-        variations.add(
-            normalize_name(last + first + middle)
-        )
-
-        variations.add(
-            normalize_name(last + middle + first)
-        )
-
-    elif len(parts) == 2:
-
-        first = parts[0]
-        last = parts[1]
-
-        variations.add(
-            normalize_name(first + last)
-        )
-
-        variations.add(
-            normalize_name(last + first)
+            normalize_name(
+                "".join(p)
+            )
         )
 
     return list(variations)
+
 
 # ==================================================
 # Artifact upload
@@ -206,6 +181,19 @@ if contact_file and uploaded_file:
 
     contact_df = pd.read_excel(contact_file)
 
+    # Role 공백 제거
+    contact_df["Role"] = (
+        contact_df["Role"]
+        .astype(str)
+        .str.strip()
+    )
+
+    contact_df["Name(EN)"] = (
+        contact_df["Name(EN)"]
+        .astype(str)
+        .str.strip()
+    )
+
     st.success("Contact List Uploaded!")
 
     st.dataframe(contact_df.head())
@@ -214,6 +202,8 @@ if contact_file and uploaded_file:
     # Internal Matching data
     # ===================================
     staff_results = []
+
+    name_col = "Name(EN)"
 
     for name in contact_df["Name(EN)"]:
 
@@ -465,6 +455,125 @@ if contact_file and uploaded_file:
 
     compliance_df = pd.DataFrame(
         compliance_results
+    )
+# ==========================================
+# Main Dashboard
+# ==========================================
+
+    dashboard_results = []
+
+    for _, row in compliance_df.iterrows():
+
+        required = 0
+        completed = 0
+
+        for doc in [
+            "Curriculum Vitae",
+            "Financial Disclosure",
+            "Data Privacy",
+            "Training"
+        ]:
+
+            if row[doc] != "-":
+
+                required += 1
+
+                if row[doc] == "✅":
+                    completed += 1
+
+        score = round(
+            completed / required * 100
+        ) if required > 0 else 0
+
+        if score == 100:
+            status = "🟢 Green"
+
+        elif score >= 75:
+            status = "🟡 Amber"
+
+        else:
+            status = "🔴 Red"
+
+        dashboard_results.append(
+            {
+                "Site Staff": row["Name"],
+                "Role": row["Role"],
+                "Compliance Score": f"{score}%",
+                "Status": status
+            }
+        )
+
+    dashboard_df = pd.DataFrame(
+        dashboard_results
+    )
+
+    st.subheader("Main Dashboard")
+
+    st.dataframe(
+        dashboard_df,
+        use_container_width=True
+    )
+
+
+# ==========================================
+# TMF Health Score
+# ==========================================
+
+    required_count = 0
+    completed_count = 0
+
+    for _, row in compliance_df.iterrows():
+
+        for doc in [
+            "Curriculum Vitae",
+            "Financial Disclosure",
+            "Data Privacy",
+            "Training"
+        ]:
+
+            if row[doc] != "-":
+
+                required_count += 1
+
+                if row[doc] == "✅":
+                    completed_count += 1
+
+    health_score = round(
+        completed_count / required_count * 100,
+        1
+    )
+
+    st.subheader("TMF Health Score")
+
+    st.metric(
+        "Overall TMF Compliance",
+        f"{health_score}%"
+    )
+
+    # ==================================
+    # missing summary 
+    # ===================================
+    st.subheader("Missing Documents Summary")
+
+    missing_summary = pd.DataFrame({
+        "Document": [
+            "CV",
+            "FDF",
+            "DPA",
+            "Training"
+        ],
+
+        "Missing": [
+            (compliance_df["Curriculum Vitae"] == "❌").sum(),
+            (compliance_df["Financial Disclosure"] == "❌").sum(),
+            (compliance_df["Data Privacy"] == "❌").sum(),
+            (compliance_df["Training"] == "❌").sum()
+        ]
+    })
+
+    st.dataframe(
+        missing_summary,
+        use_container_width=True
     )
 
     # ==========================================
