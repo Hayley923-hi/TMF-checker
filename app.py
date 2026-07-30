@@ -15,7 +15,7 @@ required_docs = {
     "Sub-I": [
         "Curriculum Vitae",
         "Financial Disclosure",
-        "Data Privacy"
+        "Data Privacy",
         "Training"
     ],
 
