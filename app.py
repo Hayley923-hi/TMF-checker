@@ -16,6 +16,7 @@ required_docs = {
         "Curriculum Vitae",
         "Financial Disclosure",
         "Data Privacy"
+        "Training"
     ],
 
     "Blind CRC": [
