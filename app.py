@@ -146,14 +146,35 @@ def generate_name_variants(name):
         variants.add(
             f"{last} {first} {middle}"
         )
+        variants.add(first + middle + last)
+        variants.add(f"{first}{middle} {last}")
+
+        variants.add(middle + last + first)
+        variants.add(f"{middle}{last} {first}")
 
     return variants
+
+
+def extract_description_name(text):
+
+    text = str(text)
+
+    match = re.search(
+        r"(?:Sub-I_|CRC_|PI_|Pharmacist_|"
+        r"LabTech_)?([A-Za-z]+(?:[A-Z][a-z]+)+)",
+        text
+    )
+
+    if match:
+        return match.group(1)
+
+    return text
 
 
 def investigator_match(name, description):
 
     desc = compact_name(description)
-
+    
     variants = generate_name_variants(name)
 
     for v in variants:
@@ -369,8 +390,6 @@ if contact_file and uploaded_file:
         training_records
     )
 
-    st.write(training_df.head())
-
     # ======================================
     # Unmatched Documents
     # ======================================
@@ -416,7 +435,7 @@ if contact_file and uploaded_file:
                         best_name,
 
                     "Match Score":
-                        round(best_score,1)
+                        round(best_score, 1)
 
                 }
             )
@@ -513,6 +532,7 @@ if contact_file and uploaded_file:
 # ======================================
 # Main Dashboard
 # ======================================
+    st.subheader("Main Dashboard")
 
     # Role Filter
     role_list = sorted(
@@ -567,6 +587,13 @@ if contact_file and uploaded_file:
             "Training"
         ]
     ]
+    summary_df = summary_df.rename(
+        columns={
+            "Curriculum Vitae": "CV",
+            "Financial Disclosure": "FDF",
+            "Data Privacy": "DPA"
+        }
+    )
 
     st.dataframe(
         summary_df,
@@ -618,21 +645,65 @@ if contact_file and uploaded_file:
 
             st.markdown("### Document Status")
 
-            doc_status_df = pd.DataFrame(
-                {
-                    "Document": [
-                        "Curriculum Vitae",
-                        "Financial Disclosure",
-                        "Data Privacy",
-                        "Training"
-                    ],
-                    "Status": [
-                        person["Curriculum Vitae"],
-                        person["Financial Disclosure"],
-                        person["Data Privacy"],
-                        person["Training"]
+            document_rows = []
+
+            for doc in [
+                "Curriculum Vitae",
+                "Financial Disclosure",
+                "Data Privacy",
+                "Training"
+            ]:
+
+                status = person[doc]
+
+                doc_date = "-"
+
+                if status == "✅":
+
+                    matched_docs = staff_docs[
+                        (
+                            staff_docs["Classification"]
+                            .str.contains(
+                                doc,
+                                case=False,
+                                na=False
+                            )
+                        )
+                        &
+                        (
+                            staff_docs["Description"]
+                            .apply(
+                                lambda x:
+                                investigator_match(
+                                    staff_name,
+                                    str(x)
+                                )
+                            )
+                        )
                     ]
-                }
+
+                    if not matched_docs.empty:
+
+                        try:
+                            doc_date = pd.to_datetime(
+                                matched_docs.iloc[0]["Document Date"]
+                            ).strftime("%Y-%m-%d")
+
+                        except:
+                            doc_date = str(
+                                matched_docs.iloc[0]["Document Date"]
+                            )
+
+                document_rows.append(
+                    {
+                        "Document": doc,
+                        "Status": status,
+                        "Date": doc_date
+                    }
+                )
+
+            doc_status_df = pd.DataFrame(
+                document_rows
             )
 
             st.dataframe(
@@ -642,7 +713,10 @@ if contact_file and uploaded_file:
 
             st.markdown("### Training Records")
 
-            if len(person_training) > 0:
+            if (
+                len(person_training) > 0
+                and "Date" in person_training.columns
+            ):
 
                 st.dataframe(
                     person_training[
