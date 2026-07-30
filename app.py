@@ -96,40 +96,95 @@ def normalize_name(text):
     return text.strip()
 
 
+def compact_name(text):
+    text = normalize_name(text)
+    return text.replace(" ", "")
+
+
+def generate_name_variants(name):
+
+    name = normalize_name(name)
+
+    tokens = name.split()
+
+    variants = set()
+
+    variants.add(name)
+    variants.add("".join(tokens))
+
+    if len(tokens) >= 2:
+
+        variants.add(
+            " ".join(reversed(tokens))
+        )
+
+        variants.add(
+            "".join(reversed(tokens))
+        )
+
+    # 한국 이름 대응
+    if len(tokens) == 3:
+
+        first = tokens[0]
+        middle = tokens[1]
+        last = tokens[2]
+
+        # Ji Young Yoon
+        variants.add(last + first + middle)
+        variants.add(last + middle + first)
+
+        variants.add(
+            f"{last} {first}{middle}"
+        )
+
+        variants.add(
+            f"{last} {first} {middle}"
+        )
+
+    return variants
+
+
 def investigator_match(name, description):
 
-    name_clean = normalize_name(name)
-    desc_clean = normalize_name(description)
+    desc = compact_name(description)
 
-    # 이름이 그대로 포함된 경우
-    if name_clean in desc_clean:
-        return True
+    variants = generate_name_variants(name)
 
-    # 순서 뒤집힌 이름
-    reverse_name = " ".join(
-        reversed(name_clean.split())
-    )
+    for v in variants:
 
-    if reverse_name in desc_clean:
-        return True
+        v_compact = compact_name(v)
 
-    score = fuzz.partial_token_sort_ratio(
-        name_clean,
-        desc_clean
-    )
+        if v_compact in desc:
+            return True
 
-    return score >= 70
+        score = fuzz.partial_ratio(
+            v_compact,
+            desc
+        )
+
+        if score >= 85:
+            return True
+
+    return False
+    
 
 def best_match_score(description, contact_names):
 
     best_name = ""
     best_score = 0
 
+    desc = compact_name(description)
+
     for staff_name in contact_names:
 
-        score = fuzz.partial_token_sort_ratio(
-            normalize_name(staff_name),
-            normalize_name(description)
+        variants = generate_name_variants(staff_name)
+
+        score = max(
+            fuzz.partial_ratio(
+                compact_name(v),
+                desc
+            )
+            for v in variants
         )
 
         if score > best_score:
@@ -252,6 +307,7 @@ if contact_file and uploaded_file:
                     row["Classification"]
                 )
 
+                
         docs_found = list(set(docs_found))
 
         staff_results.append(
