@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 from rapidfuzz import fuzz
+from io import BytesIO
 
 required_docs = {
 
@@ -323,6 +324,11 @@ if contact_file and uploaded_file:
 
     contact_df = pd.read_excel(contact_file)
 
+    contact_df.columns = (
+        contact_df.columns
+        .str.strip()
+    )
+
     # Role 공백 제거
     contact_df["Role"] = (
         contact_df["Role"]
@@ -368,7 +374,6 @@ if contact_file and uploaded_file:
             role_summary,
             use_container_width=True
         )
-
 
     # ===================================
     # Internal Matching data
@@ -796,3 +801,106 @@ if contact_file and uploaded_file:
         unmatched_df,
         use_container_width=True
     )
+
+# ==========================================
+# Action Items Export
+# ==========================================
+
+    action_summary = []
+
+    for _, row in compliance_df.iterrows():
+
+        missing_docs = []
+
+        for doc in [
+            "Curriculum Vitae",
+            "Financial Disclosure",
+            "Data Privacy",
+            "Training"
+        ]:
+
+            if row[doc] == "❌":
+                missing_docs.append(doc)
+
+        if missing_docs:
+
+            staff_info = contact_df[
+                contact_df["Name(EN)"] == row["Name"]
+            ].iloc[0]
+
+            action_summary.append(
+                {
+                    "Name": row["Name"],
+                    "Role": row["Role"],
+
+                    "Start Date": (
+                        pd.to_datetime(
+                            staff_info["Start date"],
+                            errors="coerce"
+                        ).strftime("%Y-%m-%d")
+                        if pd.notna(
+                            pd.to_datetime(
+                                staff_info["Start date"],
+                                errors="coerce"
+                            )
+                        )
+                        else "-"
+                    ),
+
+                    "Stop Date": (
+                        pd.to_datetime(
+                            staff_info["Stop date"],
+                            errors="coerce"
+                        ).strftime("%Y-%m-%d")
+                        if pd.notna(
+                            pd.to_datetime(
+                                staff_info["Stop date"],
+                                errors="coerce"
+                            )
+                        )
+                        else "-"
+                    ),
+
+                    "Missing Documents":
+                        ", ".join(missing_docs)
+                }
+            )
+
+
+    action_df = pd.DataFrame(action_summary)
+
+    with st.expander(
+        "📌 Action Items",
+        expanded=False
+    ):
+
+        st.dataframe(
+            action_df,
+            use_container_width=True
+        )
+
+        output = BytesIO()
+
+        with pd.ExcelWriter(
+            output,
+            engine="openpyxl"
+        ) as writer:
+
+            action_df.to_excel(
+                writer,
+                sheet_name="Action Items",
+                index=False
+            )
+
+            unmatched_df.to_excel(
+                writer,
+                sheet_name="Unmatched Documents",
+                index=False
+            )
+
+        st.download_button(
+            label="⬇ Download Action Items Report",
+            data=output.getvalue(),
+            file_name="TMF_Action_Items_Report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
