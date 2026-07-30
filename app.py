@@ -240,11 +240,9 @@ if uploaded_file:
         f"Artifact Uploaded ({len(df)} records)"
     )
 
-
 # ==================================================
 # Document Type Summary
 # ==================================================
-st.subheader("Document Type Summary")
 
 if uploaded_file:
 
@@ -274,10 +272,36 @@ if uploaded_file:
         na=False
     ).sum()
 
-    st.write(f"DPA: {dpa_count}")
-    st.write(f"CV: {cv_count}")
-    st.write(f"FDF: {fdf_count}")
-    st.write(f"Training: {training_count}")
+    with st.expander(
+        "📊 Document Type Summary",
+        expanded=False
+    ):
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                "DPA",
+                dpa_count
+            )
+
+        with col2:
+            st.metric(
+                "CV",
+                cv_count
+            )
+
+        with col3:
+            st.metric(
+                "FDF",
+                fdf_count
+            )
+
+        with col4:
+            st.metric(
+                "Training",
+                training_count
+            )
 
     staff_docs = df[
         df["Classification"].str.contains(
@@ -286,6 +310,7 @@ if uploaded_file:
             na=False
         )
     ]
+
 # ==================================================
 # Contact List upload
 # ==================================================
@@ -314,6 +339,36 @@ if contact_file and uploaded_file:
     st.success(
         f"Contact List Uploaded ({len(contact_df)} staff)"
     )
+
+# ==================================================
+# staff summary
+# ==================================================
+ 
+    with st.expander(
+        f"👥Staff Summary ({len(contact_df)} staff)",
+        expanded=False
+    ):
+
+        st.write(
+            f"Total Staff: {len(contact_df)}"
+        )
+
+        role_summary = (
+            contact_df["Role"]
+            .value_counts()
+            .reset_index()
+        )
+
+        role_summary.columns = [
+            "Role",
+            "Count"
+        ]
+
+        st.dataframe(
+            role_summary,
+            use_container_width=True
+        )
+
 
     # ===================================
     # Internal Matching data
@@ -389,88 +444,6 @@ if contact_file and uploaded_file:
     training_df = pd.DataFrame(
         training_records
     )
-
-    # ======================================
-    # Unmatched Documents
-    # ======================================
-
-    st.subheader("Unmatched Documents")
-
-    unmatched_docs = []
-
-    for _, row in staff_docs.iterrows():
-
-        matched = False
-
-        for staff_name in contact_df["Name(EN)"]:
-
-            if investigator_match(
-                staff_name,
-                row["Description"]
-            ):
-                matched = True
-                break
-
-        if not matched:
-
-            best_name, best_score = best_match_score(
-                row["Description"],
-                contact_df["Name(EN)"]
-            )
-
-            unmatched_docs.append(
-                {
-                    "Document Date":
-                        pd.to_datetime(
-                            row["Document Date"]
-                        ).strftime("%Y-%m-%d"),
-
-                    "Classification":
-                        row["Classification"],
-
-                    "Description":
-                        row["Description"],
-
-                    "Closest staff":
-                        best_name,
-
-                    "Match Score":
-                        round(best_score, 1)
-
-                }
-            )
-
-    unmatched_df = pd.DataFrame(
-        unmatched_docs
-    )
-
-    st.metric(
-        "Unmatched Documents",
-        len(unmatched_df)
-    )
-
-    st.dataframe(
-        unmatched_df,
-        use_container_width=True
-    )
-
-
-# ==================================================
-# staff summary
-# ==================================================
-    st.subheader("Staff Summary")
-
-    st.write(f"Total Staff: {len(contact_df)}")
-
-    role_summary = (
-        contact_df["Role"]
-        .value_counts()
-        .reset_index()
-    )
-
-    role_summary.columns = ["Role", "Count"]
-
-    st.dataframe(role_summary)
 
 # ==========================================
 # Compliance Matrix
@@ -734,41 +707,6 @@ if contact_file and uploaded_file:
                     "No training records found."
                 )
 
-# ==========================================
-# TMF Health Score
-# ==========================================
-
-    required_count = 0
-    completed_count = 0
-
-    for _, row in compliance_df.iterrows():
-
-        for doc in [
-            "Curriculum Vitae",
-            "Financial Disclosure",
-            "Data Privacy",
-            "Training"
-        ]:
-
-            if row[doc] != "-":
-
-                required_count += 1
-
-                if row[doc] == "✅":
-                    completed_count += 1
-
-    health_score = round(
-        completed_count / required_count * 100,
-        1
-    )
-
-    st.subheader("TMF Health Score")
-
-    st.metric(
-        "Overall TMF Compliance",
-        f"{health_score}%"
-    )
-
     # ==================================
     # missing summary
     # ===================================
@@ -795,44 +733,66 @@ if contact_file and uploaded_file:
         use_container_width=True
     )
 
-    # ==========================================
-    # Missing Only Filter
-    # ==========================================
+    # ======================================
+    # Unmatched Documents
+    # ======================================
 
-    show_missing_only = st.checkbox(
-        "Show Missing Documents Only"
+    st.subheader("Unmatched Documents")
+
+    unmatched_docs = []
+
+    for _, row in staff_docs.iterrows():
+
+        matched = False
+
+        for staff_name in contact_df["Name(EN)"]:
+
+            if investigator_match(
+                staff_name,
+                row["Description"]
+            ):
+                matched = True
+                break
+
+        if not matched:
+
+            best_name, best_score = best_match_score(
+                row["Description"],
+                contact_df["Name(EN)"]
+            )
+
+            unmatched_docs.append(
+                {
+                    "Document Date":
+                        pd.to_datetime(
+                            row["Document Date"]
+                        ).strftime("%Y-%m-%d"),
+
+                    "Classification":
+                        row["Classification"],
+
+                    "Description":
+                        row["Description"],
+
+                    "Closest staff":
+                        best_name,
+
+                    "Match Score":
+                        round(best_score, 1)
+
+                }
+            )
+
+    unmatched_df = pd.DataFrame(
+        unmatched_docs
     )
 
-    filtered_df = compliance_df.copy()
-
-    if show_missing_only:
-
-        filtered_df = compliance_df[
-            (compliance_df["Curriculum Vitae"] == "❌")
-            |
-            (compliance_df["Financial Disclosure"] == "❌")
-            |
-            (compliance_df["Data Privacy"] == "❌")
-            |
-            (compliance_df["Training"] == "❌")
-        ]
-
     st.metric(
-        "Staff With Missing Documents",
-        len(
-            filtered_df[
-                (filtered_df["Curriculum Vitae"] == "❌")
-                |
-                (filtered_df["Financial Disclosure"] == "❌")
-                |
-                (filtered_df["Data Privacy"] == "❌")
-                |
-                (filtered_df["Training"] == "❌")
-            ]
-        )
+        "Unmatched Documents",
+        len(unmatched_df)
     )
 
     st.dataframe(
-        filtered_df,
+        unmatched_df,
         use_container_width=True
     )
