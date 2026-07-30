@@ -38,6 +38,11 @@ required_docs = {
         "Training"
     ],
 
+    "Injection nurse": [
+        "Data Privacy",
+        "Training"
+    ],
+
     "Study Nurse": [
         "Data Privacy",
         "Training"
@@ -166,7 +171,7 @@ def investigator_match(name, description):
             return True
 
     return False
-    
+
 
 def best_match_score(description, contact_names):
 
@@ -307,7 +312,6 @@ if contact_file and uploaded_file:
                     row["Classification"]
                 )
 
-                
         docs_found = list(set(docs_found))
 
         staff_results.append(
@@ -363,6 +367,8 @@ if contact_file and uploaded_file:
     training_df = pd.DataFrame(
         training_records
     )
+
+    st.write(training_df.head())
 
     # ======================================
     # Unmatched Documents
@@ -507,9 +513,66 @@ if contact_file and uploaded_file:
 # Main Dashboard
 # ======================================
 
-    st.subheader("Main Dashboard")
+    # Role Filter
+    role_list = sorted(
+        contact_df["Role"].dropna().unique()
+    )
 
-    for _, person in compliance_df.iterrows():
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        selected_role = st.selectbox(
+            "Select Role",
+            ["All"] + role_list
+        )
+
+    with col2:
+        search_name = st.text_input(
+            "Search Staff Name"
+        )
+
+    dashboard_df = compliance_df.copy()
+
+    # Role Filter 적용
+    if selected_role != "All":
+        dashboard_df = dashboard_df[
+            dashboard_df["Role"] == selected_role
+        ]
+
+    # name filter 적용
+    if search_name:
+        dashboard_df = dashboard_df[
+            dashboard_df["Name"].str.contains(
+                search_name,
+                case=False,
+                na=False
+            )
+        ]
+    st.metric(
+        "Displayed Staff",
+        len(dashboard_df)
+    )
+    # 요약 테이블 > 별로면 삭제 예정
+    
+    summary_df = dashboard_df.copy()
+
+    summary_df = summary_df[
+        [
+            "Name",
+            "Role",
+            "Curriculum Vitae",
+            "Financial Disclosure",
+            "Data Privacy",
+            "Training"
+        ]
+    ]
+
+    st.dataframe(
+        summary_df,
+        use_container_width=True
+    )
+
+    for _, person in dashboard_df.iterrows():
 
         staff_name = person["Name"]
         role = person["Role"]
